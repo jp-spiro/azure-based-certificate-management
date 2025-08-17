@@ -1,0 +1,23 @@
+[Unit]
+Description=Pull Let's Encrypt certificate from Azure Key Vault
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/pull-cert.sh
+LoadCredentialEncrypted=your-domain-cert-client-id:/etc/your-domain-cert/your-domain-cert-client-id
+LoadCredentialEncrypted=your-domain-cert-client-secret:/etc/your-domain-cert/your-domain-cert-client-secret
+LoadCredentialEncrypted=your-domain-cert-tenant-id:/etc/your-domain-cert/your-domain-cert-tenant-id
+StandardOutput=journal
+StandardError=journal
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+NoNewPrivileges=yes
+ReadWritePaths=/etc/pki/tls/certs /etc/pki/tls/private
+ReadOnlyPaths=/etc/your-domain-cert
+Environment="CREDENTIALS_DIRECTORY=/run/credentials/pull-cert.service"
+
+[Install]
+WantedBy=multi-user.target

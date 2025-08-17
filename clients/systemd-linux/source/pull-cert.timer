@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly pull of Let's Encrypt certificate from Azure Key Vault
+
+[Timer]
+OnCalendar=weekly
+Persistent=true
+RandomizedDelaySec=3600
+
+[Install]
+WantedBy=timers.target
