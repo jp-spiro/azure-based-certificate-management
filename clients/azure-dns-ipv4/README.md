@@ -6,6 +6,8 @@ The same script runs on **pfSense** (FreeBSD) or **Linux**; it only needs **curl
 
 **You do not edit the script** for your zone or file layout: pass **flags** or **environment variables** (see `-h` / `--help`).
 
+Shell-only **validation and JSON handling** are intentionally lightweight; see **Limitations and known weaknesses** at the end of this file before relying on the script in stricter environments.
+
 ## Azure setup
 
 1. Use the same public DNS zone you already host on Azure (or create one).
@@ -208,4 +210,26 @@ Alternatively put the `export` / flags in **`/usr/local/bin/azure-dns-update-run
 
 ## IPv4 only
 
-Discovery uses `curl -4` and only accepts an address matching a simple IPv4 pattern. IPv6 is intentionally out of scope here.
+IPv6 is intentionally out of scope.
+
+### How the public (“external”) IPv4 is chosen
+
+The script **does not** read the WAN interface or routing tables. It uses **outbound HTTPS** so the answer matches what arbitrary internet services see as the **source IPv4** of your traffic:
+
+1. **`curl -4`** (IPv4-only) is run against a small list of URLs whose response body is plain text containing one address.
+2. Defaults (first success wins): `https://api.ipify.org`, `https://ipv4.icanhazip.com`, `https://ifconfig.me/ip`
+3. The response is trimmed; it must pass a simple **IPv4** pattern check.
+4. Override the list with **`IPV4_DISCOVERY_URLS`** (space-separated URLs), same plain-text expectation.
+
+If you are behind **CGNAT** or otherwise lack a stable public IPv4, the value returned is still what those endpoints observe (which may not be suitable for publishing to DNS). In that case you typically need a different approach (e.g. tunnel, VPS, or ISP static IP).
+
+### Limitations and known weaknesses
+
+The script avoids extra dependencies (`jq`, Python, etc.) and uses **small shell checks** that are **not** full validators:
+
+- **Public IPv4 check (`is_ipv4`)** — Only tests a loose pattern (digits and dots, four groups). It does **not** enforce **0–255** per octet, so a pathological or buggy discovery response could slip through until Azure rejects the DNS **PUT** (or worse, if a bad value were ever accepted elsewhere).
+- **“Looks like a UUID” (`looks_like_uuid`)** — Only checks **format** (8-4-4-4-12 hex with hyphens). It does **not** verify that the value is a real Entra tenant, app id, or subscription id, version/variant bits, or that Azure will accept it; it exists mainly to catch **obviously wrong** values after credential load (e.g. still-encrypted blobs mistaken for plaintext).
+- **Resource group name (`rg_name_ok`)** — A simplified length and character-class rule. Azure’s **actual** naming rules are stricter in edge cases (e.g. some punctuation, Unicode, reserved names); uncommon names might pass the script but fail in ARM, or fail the script despite being valid—unlikely for typical ASCII names.
+- **JSON** — Token and error handling use **`grep`/`sed`-style** parsing, not a real JSON parser; unusual AAD or ARM payloads might not parse cleanly for diagnostics.
+
+For production hardening you might tighten checks (e.g. per-octet IPv4, `jq` for JSON), or keep this script minimal and rely on **Azure’s API errors** as the final gate.
